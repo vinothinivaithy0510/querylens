@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QueryLens – SQL explainer for students</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=JetBrains+Mono:wght@400;600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#eef3f7;--grid:#d5e0ea;--ink:#14243a;--muted:#55677d;--card:#fbfdff;--hi:#ffe14d;--accent:#1f5fbf;--err:#b3261e;--line:#14243a}
+@media (prefers-color-scheme:dark){:root{--paper:#0f1a28;--grid:#192a3e;--ink:#e8eef6;--muted:#9fb1c6;--card:#14233a;--hi:#c9a800;--accent:#6aa5ff;--err:#ff8a80;--line:#e8eef6}}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);font:17px/1.6 "Source Sans 3",system-ui,sans-serif;background-color:var(--paper);
+background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:28px 28px}
+main{max-width:960px;margin:0 auto;padding:32px 20px 64px}
+h1{font:700 clamp(2rem,6vw,3.4rem)/1.05 "Bricolage Grotesque",sans-serif;margin:0 0 8px}
+h1 mark{background:linear-gradient(transparent 55%,var(--hi) 55%);color:inherit;padding:0 4px}
+h2{font:700 1.25rem "Bricolage Grotesque",sans-serif;margin:0 0 10px}
+.lede{color:var(--muted);max-width:60ch;margin:0 0 28px}
+.panel{background:var(--card);border:2px solid var(--line);border-radius:6px;padding:18px;margin-bottom:18px;box-shadow:5px 5px 0 var(--line)}
+label{display:block;font-weight:600;margin-bottom:6px}
+input,select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--paper);border:2px solid var(--line);border-radius:4px;padding:9px 11px}
+textarea{font:15px/1.5 "JetBrains Mono",monospace;min-height:150px;resize:vertical}
+.row{display:grid;grid-template-columns:1fr 2fr;gap:14px}
+@media(max-width:640px){.row{grid-template-columns:1fr}}
+.hint{font-size:.9rem;color:var(--muted);margin:6px 0 0}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+button{font:600 1rem "Source Sans 3",sans-serif;cursor:pointer;border:2px solid var(--line);border-radius:4px;padding:10px 18px;background:var(--card);color:var(--ink)}
+button.primary{background:var(--hi);color:#14243a}
+button:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--line)}
+button:disabled{opacity:.6;cursor:wait;transform:none;box-shadow:none}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.err{color:var(--err);font-weight:600;margin-top:12px}
+ol.steps{margin:0;padding-left:0;list-style:none}
+ol.steps li{display:grid;grid-template-columns:110px 1fr;gap:12px;padding:8px 0;border-top:1px dashed var(--muted)}
+ol.steps li:first-child{border-top:0}
+code.k{font:600 .9rem "JetBrains Mono",monospace;background:var(--hi);color:#14243a;padding:2px 8px;border-radius:3px;align-self:start;text-align:center}
+.tblwrap{overflow-x:auto;margin-bottom:12px}
+table{border-collapse:collapse;font:14px "JetBrains Mono",monospace;min-width:240px}
+th,td{border:1.5px solid var(--line);padding:5px 10px;text-align:left}
+th{background:var(--grid)}
+.tname{font:600 .95rem "JetBrains Mono",monospace;margin:0 0 4px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+ul.pit{margin:0;padding-left:20px}
+footer{color:var(--muted);font-size:.9rem;margin-top:28px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <h1><mark>QueryLens</mark></h1>
+  <p class="lede">Paste any SQL query and get a plain-English explanation, the order the database runs it in, and AI-generated sample data showing what it returns.</p>
+
+  <section class="panel" aria-labelledby="setup">
+    <h2 id="setup">1. Connect an AI API</h2>
+    <div class="row">
+      <div>
+        <label for="provider">Provider</label>
+        <select id="provider">
+          <option value="gemini">Google Gemini (free key)</option>
+          <option value="claude">Anthropic Claude</option>
+        </select>
+      </div>
+      <div>
+        <label for="key">API key</label>
+        <input id="key" type="password" autocomplete="off" placeholder="Paste your key here">
+      </div>
+    </div>
+    <p class="hint">The key stays in this browser tab only. It is never saved or sent anywhere except the provider you chose. Get a free Gemini key at aistudio.google.com.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="q">
+    <h2 id="q">2. Paste your SQL</h2>
+    <label for="sql" class="hint" style="margin:0 0 6px">SELECT, JOIN, GROUP BY, subqueries and more are supported.</label>
+    <textarea id="sql" spellcheck="false">SELECT d.name, COUNT(e.id) AS staff, AVG(e.salary) AS avg_salary
+FROM departments d
+LEFT JOIN employees e ON e.dept_id = d.id
+WHERE e.salary > 30000
+GROUP BY d.name
+HAVING COUNT(e.id) >= 2
+ORDER BY avg_salary DESC;</textarea>
+    <div class="actions">
+      <button class="primary" id="go">Explain query</button>
+      <button id="clear" type="button">Clear</button>
+    </div>
+    <div id="error" class="err" role="alert" hidden></div>
+  </section>
+
+  <div id="out" hidden aria-live="polite">
+    <section class="panel"><h2>What this query does</h2><p id="summary"></p></section>
+    <section class="panel"><h2>How the database runs it</h2><ol class="steps" id="steps"></ol></section>
+    <section class="panel"><h2>Sample data (generated)</h2><div class="cols" id="tables"></div><p class="tname">Result</p><div class="tblwrap" id="result"></div></section>
+    <section class="panel"><h2>Common mistakes to watch for</h2><ul class="pit" id="pit"></ul></section>
+  </div>
+
+  <footer>QueryLens is a study aid. AI-generated explanations and data can contain mistakes, so check them against your textbook or a real database.</footer>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const PROMPT = sql => `You are a patient SQL tutor for first-year college students.
+Explain the SQL query below. Reply with ONLY valid JSON, with no markdown fences and no extra text, in exactly this shape:
+{"summary":"2-3 plain sentences","steps":[{"clause":"FROM","what":"what happens at this stage"}],"sample_tables":[{"name":"table","columns":["c1"],"rows":[["v1"]]}],"result":{"columns":["c1"],"rows":[["v1"]]},"pitfalls":["short tip"]}
+Rules: list steps in the logical execution order (FROM, JOIN, WHERE, GROUP BY, HAVING, SELECT, ORDER BY, LIMIT) and include only clauses the query uses. Make each sample table 3-6 realistic rows chosen so the query returns at least one row. The result must be exactly what the query would return on your sample data. Give 2-3 pitfalls.
+SQL:
+${sql}`;
+
+async function callGemini(key, prompt){
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + encodeURIComponent(key);
+  const r = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:"application/json"}})});
+  const d = await r.json();
+  if(!r.ok) throw new Error(d.error?.message || "Gemini request failed");
+  return d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("") || "";
+}
+
+async function callClaude(key, prompt){
+  const r = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",
+    headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-sonnet-5-5",max_tokens:2000,messages:[{role:"user",content:prompt}]})});
+  const d = await r.json();
+  if(!r.ok) throw new Error(d.error?.message || "Claude request failed");
+  return d.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+}
+
+function parse(text){
+  const clean = text.replace(/```json|```/g,"").trim();
+  return JSON.parse(clean.slice(clean.indexOf("{"), clean.lastIndexOf("}")+1));
+}
+
+function esc(s){ return String(s ?? "").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function table(t){
+  const head = (t.columns||[]).map(c=>`<th>${esc(c)}</th>`).join("");
+  const body = (t.rows||[]).map(r=>`<tr>${r.map(v=>`<td>${esc(v)}</td>`).join("")}</tr>`).join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function render(d){
+  $("summary").textContent = d.summary || "";
+  $("steps").innerHTML = (d.steps||[]).map(s=>`<li><code class="k">${esc(s.clause)}</code><span>${esc(s.what)}</span></li>`).join("");
+  $("tables").innerHTML = (d.sample_tables||[]).map(t=>`<div><p class="tname">${esc(t.name)}</p><div class="tblwrap">${table(t)}</div></div>`).join("");
+  $("result").innerHTML = d.result ? table(d.result) : "";
+  $("pit").innerHTML = (d.pitfalls||[]).map(p=>`<li>${esc(p)}</li>`).join("");
+  $("out").hidden = false;
+  $("out").scrollIntoView({behavior:"smooth"});
+}
+
+$("go").addEventListener("click", async ()=>{
+  const key = $("key").value.trim(), sql = $("sql").value.trim(), err = $("error");
+  err.hidden = true;
+  if(!key){ err.textContent = "Add your API key in step 1 first."; err.hidden = false; return; }
+  if(!sql){ err.textContent = "Paste a SQL query in step 2 first."; err.hidden = false; return; }
+  $("go").disabled = true; $("go").textContent = "Explaining…";
+  try{
+    const prompt = PROMPT(sql);
+    const raw = $("provider").value === "gemini" ? await callGemini(key,prompt) : await callClaude(key,prompt);
+    render(parse(raw));
+  }catch(e){
+    err.textContent = "Could not get an explanation: " + e.message + ". Check your key and try again.";
+    err.hidden = false;
+  }finally{
+    $("go").disabled = false; $("go").textContent = "Explain query";
+  }
+});
+
+$("clear").addEventListener("click", ()=>{ $("sql").value=""; $("out").hidden=true; $("error").hidden=true; });
+</script>
+</body>
+</html>
